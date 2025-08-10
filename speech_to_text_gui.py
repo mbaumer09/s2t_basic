@@ -51,7 +51,6 @@ class AudioWorker(QThread):
         self.use_gpu = torch.cuda.is_available()
         self.running = True
         self.beep_enabled = True
-        self.sd_mode = False  # Stable Diffusion prompt mode
         self.target_window_handle = None  # Specific window to send text to
         self.auto_execute = False  # Auto-press Enter after text
         
@@ -240,11 +239,6 @@ class AudioWorker(QThread):
                             execute_this_command = True
                             self.log("Voice command: Execute mode enabled for this transcription")
                         
-                        # Format text for Stable Diffusion mode
-                        if self.sd_mode:
-                            text = self.format_for_stable_diffusion(text)
-                            self.log(f"SD formatted: {text}")
-                        
                         self.transcription_signal.emit(original_text)  # Show original in history
                         
                         # Type the text to target window or current focus
@@ -357,90 +351,139 @@ class AudioWorker(QThread):
         """Send text to target window or current focus."""
         if execute_command is None:
             execute_command = self.auto_execute
+            
+        self.log(f"send_text_to_target called: text='{text}', execute_command={execute_command}")
+        
         try:
             if keyboard.is_pressed('shift') or keyboard.is_pressed('ctrl') or keyboard.is_pressed('alt'):
+                self.log("Modifier keys detected, waiting...")
                 time.sleep(0.1)
             
-            text_to_type = ' ' + text if not self.sd_mode else text
+            text_to_type = ' ' + text
+            success = False
             
             if self.target_window_handle:
-                # Send to specific window
-                try:
-                    # Check if window still exists
-                    if win32gui.IsWindow(self.target_window_handle):
-                        # Bring window to foreground temporarily
-                        current_window = win32gui.GetForegroundWindow()
-                        win32gui.SetForegroundWindow(self.target_window_handle)
-                        time.sleep(0.05)  # Brief pause for window to gain focus
-                        
-                        # Send the text
-                        keyboard.write(text_to_type)
-                        
-                        # Auto-execute if enabled
-                        if execute_command:
-                            time.sleep(0.05)  # Brief pause before Enter
-                            keyboard.press_and_release('enter')
-                        
-                        # Restore original window focus
-                        if current_window != self.target_window_handle:
-                            win32gui.SetForegroundWindow(current_window)
-                        
-                        execute_msg = " (executed)" if execute_command else ""
-                        self.log(f"Text sent to target window{execute_msg}: {text_to_type}")
-                    else:
-                        self.log("Target window no longer exists, using current focus")
-                        self.target_window_handle = None
-                        keyboard.write(text_to_type)
-                except Exception as e:
-                    self.log(f"Error sending to target window: {e}")
-                    keyboard.write(text_to_type)
+                self.log(f"Using target window mode (handle: {self.target_window_handle})")
+                success = self._send_to_target_window(text_to_type, execute_command)
             else:
-                # Send to currently focused window
-                keyboard.write(text_to_type)
+                self.log("Using current focus mode")
+                success = self._send_to_current_focus(text_to_type, execute_command)
                 
-                # Auto-execute if enabled
-                if execute_command:
-                    time.sleep(0.05)
-                    keyboard.press_and_release('enter')
+            if success:
+                execute_msg = " (with execution)" if execute_command else ""
+                self.log(f"Text sent successfully{execute_msg}: '{text_to_type}'")
+            else:
+                self.log("Text sending failed!")
                 
         except Exception as e:
-            self.log(f"Error sending text: {e}")
-
-    def format_for_stable_diffusion(self, text):
-        """Format text as comma-separated tags for Stable Diffusion prompts."""
-        import re
-        
-        # Remove punctuation except commas
-        text = re.sub(r'[.!?;:]', ',', text)
-        
-        # Split on common conjunctions and prepositions that indicate new concepts
-        separators = [' and ', ' with ', ' in ', ' on ', ' at ', ' of ', ' for ', ' but ', ' or ']
-        for sep in separators:
-            text = text.replace(sep, ', ')
-        
-        # Split long phrases
-        words = text.split()
-        chunks = []
-        current_chunk = []
-        
-        for word in words:
-            current_chunk.append(word)
-            # Create chunks of 2-4 words
-            if len(current_chunk) >= 3 and word.lower() not in ['a', 'an', 'the', 'is', 'are', 'was', 'were']:
-                chunks.append(' '.join(current_chunk))
-                current_chunk = []
-        
-        if current_chunk:
-            chunks.append(' '.join(current_chunk))
-        
-        # Join with commas and clean up
-        result = ', '.join(chunks)
-        result = re.sub(r',\s*,', ',', result)  # Remove double commas
-        result = re.sub(r'\s+', ' ', result)  # Normalize whitespace
-        result = result.strip(', ').lower()
-        
-        return result
+            self.log(f"Error in send_text_to_target: {e}")
     
+    def _send_to_target_window(self, text, execute_command):
+        """Send text to a specific target window."""
+        try:
+            # Check if window still exists
+            if not win32gui.IsWindow(self.target_window_handle):
+                self.log("Target window no longer exists, clearing target")
+                self.target_window_handle = None
+                return self._send_to_current_focus(text, execute_command)
+            
+            # Get window info for logging
+            target_title = win32gui.GetWindowText(self.target_window_handle)
+            current_window = win32gui.GetForegroundWindow()
+            current_title = win32gui.GetWindowText(current_window) if current_window else "None"
+            
+            self.log(f"Target window: '{target_title}' (handle: {self.target_window_handle})")
+            self.log(f"Current window: '{current_title}' (handle: {current_window})")
+            
+            # Attempt to bring target window to foreground
+            try:
+                focus_result = win32gui.SetForegroundWindow(self.target_window_handle)
+                self.log(f"SetForegroundWindow result: {focus_result}")
+                time.sleep(0.1)  # Give time for focus change
+                
+                # Verify focus change
+                new_foreground = win32gui.GetForegroundWindow()
+                focus_success = (new_foreground == self.target_window_handle)
+                self.log(f"Focus change successful: {focus_success} (new foreground: {new_foreground})")
+                
+                if not focus_success:
+                    self.log("WARNING: SetForegroundWindow may have failed, continuing anyway")
+                
+            except Exception as e:
+                self.log(f"SetForegroundWindow failed: {e}")
+                
+            # Send the text
+            self.log(f"Typing text: '{text}'")
+            keyboard.write(text)
+            
+            # Auto-execute if enabled
+            if execute_command:
+                self.log("Executing command (pressing Enter)...")
+                time.sleep(0.1)  # Pause before execution
+                
+                # Verify we're still focused on target before execution
+                current_focus = win32gui.GetForegroundWindow()
+                if current_focus != self.target_window_handle:
+                    self.log(f"WARNING: Focus lost before execution! Current: {current_focus}, Target: {self.target_window_handle}")
+                    # Try to regain focus
+                    try:
+                        win32gui.SetForegroundWindow(self.target_window_handle)
+                        time.sleep(0.05)
+                    except:
+                        pass
+                
+                keyboard.press_and_release('end')  # Ensure cursor at end
+                time.sleep(0.05)
+                self.log("Pressing Enter key...")
+                keyboard.press_and_release('enter')
+                self.log("Enter key pressed")
+            
+            # Restore original window focus if it was different
+            try:
+                if current_window and current_window != self.target_window_handle:
+                    self.log(f"Restoring focus to original window: {current_window}")
+                    win32gui.SetForegroundWindow(current_window)
+            except Exception as e:
+                self.log(f"Failed to restore original focus: {e}")
+            
+            return True
+            
+        except Exception as e:
+            self.log(f"Error in _send_to_target_window: {e}")
+            # Fallback to current focus
+            return self._send_to_current_focus(text, execute_command)
+    
+    def _send_to_current_focus(self, text, execute_command):
+        """Send text to currently focused window."""
+        try:
+            current_window = win32gui.GetForegroundWindow()
+            current_title = win32gui.GetWindowText(current_window) if current_window else "None"
+            self.log(f"Sending to current focus: '{current_title}' (handle: {current_window})")
+            
+            # Send the text
+            self.log(f"Typing text: '{text}'")
+            keyboard.write(text)
+            
+            # Auto-execute if enabled
+            if execute_command:
+                self.log("Executing command (pressing Enter)...")
+                time.sleep(0.1)  # Pause before execution
+                
+                # Verify focus hasn't changed
+                new_focus = win32gui.GetForegroundWindow()
+                if new_focus != current_window:
+                    self.log(f"WARNING: Focus changed during typing! Original: {current_window}, Current: {new_focus}")
+                
+                self.log("Pressing Enter key...")
+                keyboard.press_and_release('enter')
+                self.log("Enter key pressed")
+            
+            return True
+            
+        except Exception as e:
+            self.log(f"Error in _send_to_current_focus: {e}")
+            return False
+
     def stop(self):
         self.running = False
 
@@ -515,12 +558,6 @@ class MainWindow(QMainWindow):
         self.auto_space_checkbox = QCheckBox("Auto-add space")
         self.auto_space_checkbox.setChecked(True)
         options_layout.addWidget(self.auto_space_checkbox)
-        
-        self.sd_mode_checkbox = QCheckBox("Stable Diffusion mode")
-        self.sd_mode_checkbox.setChecked(False)
-        self.sd_mode_checkbox.stateChanged.connect(self.toggle_sd_mode)
-        self.sd_mode_checkbox.setToolTip("Format output as comma-separated tags for image generation")
-        options_layout.addWidget(self.sd_mode_checkbox)
         
         self.auto_execute_checkbox = QCheckBox("Auto-execute (Enter)")
         self.auto_execute_checkbox.setChecked(False)
@@ -638,12 +675,6 @@ class MainWindow(QMainWindow):
     def toggle_beep(self, state):
         if self.audio_worker:
             self.audio_worker.beep_enabled = (state == 2)
-            
-    def toggle_sd_mode(self, state):
-        if self.audio_worker:
-            self.audio_worker.sd_mode = (state == 2)
-            mode_status = "enabled" if state == 2 else "disabled"
-            self.append_log(f"Stable Diffusion mode {mode_status}")
             
     def toggle_auto_execute(self, state):
         if self.audio_worker:
