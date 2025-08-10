@@ -17,6 +17,9 @@ import keyboard
 import whisper
 import pystray
 from PIL import Image, ImageDraw
+import win32gui
+import win32con
+import win32api
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QPushButton, QTextEdit, QLabel, 
                              QComboBox, QSystemTrayIcon, QMenu, QGroupBox,
@@ -49,6 +52,8 @@ class AudioWorker(QThread):
         self.running = True
         self.beep_enabled = True
         self.sd_mode = False  # Stable Diffusion prompt mode
+        self.target_window_handle = None  # Specific window to send text to
+        self.auto_execute = False  # Auto-press Enter after text
         
     def log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -224,19 +229,26 @@ class AudioWorker(QThread):
                     if len(text) > 15 or audio_rms > 0.01:  # Either long text or clear audio
                         self.log(f"Transcribed in {transcribe_time:.2f}s")
                         
+                        # Check for voice commands
+                        original_text = text
+                        execute_this_command = self.auto_execute  # Default to GUI setting
+                        
+                        # Parse voice commands
+                        text, voice_commands = self.parse_voice_commands(text)
+                        
+                        if 'execute' in voice_commands:
+                            execute_this_command = True
+                            self.log("Voice command: Execute mode enabled for this transcription")
+                        
                         # Format text for Stable Diffusion mode
                         if self.sd_mode:
                             text = self.format_for_stable_diffusion(text)
                             self.log(f"SD formatted: {text}")
                         
-                        self.transcription_signal.emit(text)
+                        self.transcription_signal.emit(original_text)  # Show original in history
                         
-                        # Type the text
-                        if keyboard.is_pressed('shift') or keyboard.is_pressed('ctrl') or keyboard.is_pressed('alt'):
-                            time.sleep(0.1)
-                        
-                        text_to_type = ' ' + text if not self.sd_mode else text
-                        keyboard.write(text_to_type)
+                        # Type the text to target window or current focus
+                        self.send_text_to_target(text, execute_this_command)
                     else:
                         self.log(f"Filtered possible hallucination: '{text}'")
                 else:
@@ -289,6 +301,111 @@ class AudioWorker(QThread):
         except Exception as e:
             self.log(f"Audio error: {e}")
             
+    def get_window_list(self):
+        """Get list of visible windows with their handles and titles."""
+        def enum_window_callback(hwnd, windows):
+            if win32gui.IsWindowVisible(hwnd):
+                window_text = win32gui.GetWindowText(hwnd)
+                if window_text.strip():  # Only include windows with titles
+                    windows.append((hwnd, window_text))
+            return True
+        
+        windows = []
+        win32gui.EnumWindows(enum_window_callback, windows)
+        
+        # Filter out empty titles and sort by title
+        windows = [(hwnd, title) for hwnd, title in windows if title.strip()]
+        windows.sort(key=lambda x: x[1].lower())
+        
+        return windows
+    
+    def parse_voice_commands(self, text):
+        """Parse voice commands from transcribed text."""
+        commands = []
+        cleaned_text = text.lower()
+        
+        # Define voice command patterns and their variations
+        execute_patterns = [
+            'execute mode',
+            'execute command', 
+            'execute',
+            'run command',
+            'run this',
+            'command mode'
+        ]
+        
+        # Check for execute commands at the beginning of text
+        for pattern in execute_patterns:
+            if cleaned_text.startswith(pattern):
+                commands.append('execute')
+                # Remove the command from the text
+                text = text[len(pattern):].strip()
+                break
+        
+        return text, commands
+    
+    def set_target_window(self, window_handle):
+        """Set the target window for text output."""
+        self.target_window_handle = window_handle
+        if window_handle:
+            window_title = win32gui.GetWindowText(window_handle)
+            self.log(f"Target window set to: {window_title}")
+        else:
+            self.log("Target window cleared (using current focus)")
+    
+    def send_text_to_target(self, text, execute_command=None):
+        """Send text to target window or current focus."""
+        if execute_command is None:
+            execute_command = self.auto_execute
+        try:
+            if keyboard.is_pressed('shift') or keyboard.is_pressed('ctrl') or keyboard.is_pressed('alt'):
+                time.sleep(0.1)
+            
+            text_to_type = ' ' + text if not self.sd_mode else text
+            
+            if self.target_window_handle:
+                # Send to specific window
+                try:
+                    # Check if window still exists
+                    if win32gui.IsWindow(self.target_window_handle):
+                        # Bring window to foreground temporarily
+                        current_window = win32gui.GetForegroundWindow()
+                        win32gui.SetForegroundWindow(self.target_window_handle)
+                        time.sleep(0.05)  # Brief pause for window to gain focus
+                        
+                        # Send the text
+                        keyboard.write(text_to_type)
+                        
+                        # Auto-execute if enabled
+                        if execute_command:
+                            time.sleep(0.05)  # Brief pause before Enter
+                            keyboard.press_and_release('enter')
+                        
+                        # Restore original window focus
+                        if current_window != self.target_window_handle:
+                            win32gui.SetForegroundWindow(current_window)
+                        
+                        execute_msg = " (executed)" if execute_command else ""
+                        self.log(f"Text sent to target window{execute_msg}: {text_to_type}")
+                    else:
+                        self.log("Target window no longer exists, using current focus")
+                        self.target_window_handle = None
+                        keyboard.write(text_to_type)
+                except Exception as e:
+                    self.log(f"Error sending to target window: {e}")
+                    keyboard.write(text_to_type)
+            else:
+                # Send to currently focused window
+                keyboard.write(text_to_type)
+                
+                # Auto-execute if enabled
+                if execute_command:
+                    time.sleep(0.05)
+                    keyboard.press_and_release('enter')
+                
+        except Exception as e:
+            self.log(f"Error sending text: {e}")
+
     def format_for_stable_diffusion(self, text):
         """Format text as comma-separated tags for Stable Diffusion prompts."""
         import re
@@ -405,11 +522,36 @@ class MainWindow(QMainWindow):
         self.sd_mode_checkbox.setToolTip("Format output as comma-separated tags for image generation")
         options_layout.addWidget(self.sd_mode_checkbox)
         
+        self.auto_execute_checkbox = QCheckBox("Auto-execute (Enter)")
+        self.auto_execute_checkbox.setChecked(False)
+        self.auto_execute_checkbox.stateChanged.connect(self.toggle_auto_execute)
+        self.auto_execute_checkbox.setToolTip("Automatically press Enter after typing text")
+        options_layout.addWidget(self.auto_execute_checkbox)
+        
         options_layout.addStretch()
         controls_layout.addLayout(options_layout)
         
         controls_group.setLayout(controls_layout)
         layout.addWidget(controls_group)
+        
+        # Window targeting
+        window_group = QGroupBox("Window Targeting")
+        window_layout = QVBoxLayout()
+        
+        window_select_layout = QHBoxLayout()
+        window_select_layout.addWidget(QLabel("Target Window:"))
+        self.window_combo = QComboBox()
+        self.window_combo.addItem("Current Focus (Default)", None)
+        self.window_combo.currentIndexChanged.connect(self.select_target_window)
+        window_select_layout.addWidget(self.window_combo)
+        
+        refresh_windows_btn = QPushButton("Refresh")
+        refresh_windows_btn.clicked.connect(self.refresh_windows)
+        window_select_layout.addWidget(refresh_windows_btn)
+        
+        window_layout.addLayout(window_select_layout)
+        window_group.setLayout(window_layout)
+        layout.addWidget(window_group)
         
         # Transcription history
         history_group = QGroupBox("Transcription History")
@@ -503,6 +645,39 @@ class MainWindow(QMainWindow):
             mode_status = "enabled" if state == 2 else "disabled"
             self.append_log(f"Stable Diffusion mode {mode_status}")
             
+    def toggle_auto_execute(self, state):
+        if self.audio_worker:
+            self.audio_worker.auto_execute = (state == 2)
+            mode_status = "enabled" if state == 2 else "disabled"
+            self.append_log(f"Auto-execute mode {mode_status}")
+            
+    def refresh_windows(self):
+        """Refresh the list of available windows."""
+        if not self.audio_worker:
+            return
+            
+        # Clear current items except the default
+        self.window_combo.clear()
+        self.window_combo.addItem("Current Focus (Default)", None)
+        
+        # Get window list from worker
+        try:
+            windows = self.audio_worker.get_window_list()
+            for hwnd, title in windows:
+                # Truncate very long titles
+                display_title = title[:60] + "..." if len(title) > 60 else title
+                self.window_combo.addItem(display_title, hwnd)
+        except Exception as e:
+            self.append_log(f"Error refreshing windows: {e}")
+            
+    def select_target_window(self, index):
+        """Select target window from dropdown."""
+        if not self.audio_worker:
+            return
+            
+        selected_data = self.window_combo.itemData(index)
+        self.audio_worker.set_target_window(selected_data)
+            
     def start_audio_worker(self):
         self.audio_worker = AudioWorker(self.model_size)
         self.audio_worker.log_signal.connect(self.append_log)
@@ -515,6 +690,9 @@ class MainWindow(QMainWindow):
             self.audio_worker.set_microphone(self.mic_combo.currentData())
             
         self.audio_worker.start()
+        
+        # Auto-refresh windows list
+        QTimer.singleShot(1000, self.refresh_windows)
         
     def restart_audio_worker(self):
         if self.audio_worker:

@@ -12,6 +12,9 @@ A lightweight, locally-hosted speech-to-text utility that transcribes your voice
 - 🎯 **Multiple Whisper models** (tiny, base, small, medium, large)
 - 🔔 **Audio feedback** for recording start/stop
 - 🎨 **Stable Diffusion mode** formats output as comma-separated tags for image generation
+- 🎯 **Window targeting** send text to specific windows even when not focused
+- ⚡ **Auto-execute** automatically presses Enter after typing text
+- 🗣️ **Voice commands** say "execute mode" to run commands without GUI interaction
 - ⚡ **Minimal latency** with optimized processing
 
 ## Prerequisites
@@ -66,6 +69,8 @@ Features:
 - Microphone selection
 - Model switching
 - Stable Diffusion prompt mode
+- Window targeting (send text to specific windows)
+- Auto-execute commands with Enter key
 - Transcription history
 - Real-time logs
 
@@ -93,6 +98,16 @@ python speech_to_text.py --model base
 5. **Release Right Ctrl** to transcribe
 6. Text appears at your cursor position
 
+### Voice Commands
+
+Start your speech with these commands for special behavior:
+
+- **"Execute mode [command]"** - Automatically presses Enter after typing
+- **"Execute command [command]"** - Same as above
+- **"Run command [command]"** - Same as above
+
+Example: Say *"Execute mode python main.py"* to type and run the command automatically.
+
 ## Project Structure
 
 ```
@@ -119,6 +134,9 @@ s2t_basic/
 - **Visual Feedback**: Red recording indicator
 - **Model Switching**: Change models without restarting
 - **Stable Diffusion Mode**: Converts speech to comma-separated tags (e.g., "tropical beach, sunset, palm trees")
+- **Window Targeting**: Select specific windows to receive text (e.g., always send to Claude Code terminal)
+- **Auto-Execute**: Automatically press Enter after typing text (perfect for running voice commands)
+- **Voice Commands**: Say "execute mode" at start of speech to auto-run that specific command
 - **History**: View all transcriptions with timestamps
 - **Audio Toggle**: Enable/disable beep sounds
 
