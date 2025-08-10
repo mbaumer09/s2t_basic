@@ -11,6 +11,7 @@ A lightweight, locally-hosted speech-to-text utility that transcribes your voice
 - 📝 **Transcription history** with session logging
 - 🎯 **Multiple Whisper models** (tiny, base, small, medium, large)
 - 🔔 **Audio feedback** for recording start/stop
+- 🎨 **Stable Diffusion mode** formats output as comma-separated tags for image generation
 - ⚡ **Minimal latency** with optimized processing
 
 ## Prerequisites
@@ -64,6 +65,7 @@ Features:
 - System tray icon (minimize to tray)
 - Microphone selection
 - Model switching
+- Stable Diffusion prompt mode
 - Transcription history
 - Real-time logs
 
@@ -116,6 +118,7 @@ s2t_basic/
 - **System Tray**: Minimize to tray, stays running in background
 - **Visual Feedback**: Red recording indicator
 - **Model Switching**: Change models without restarting
+- **Stable Diffusion Mode**: Converts speech to comma-separated tags (e.g., "tropical beach, sunset, palm trees")
 - **History**: View all transcriptions with timestamps
 - **Audio Toggle**: Enable/disable beep sounds
 

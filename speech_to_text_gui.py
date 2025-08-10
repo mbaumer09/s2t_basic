@@ -48,6 +48,7 @@ class AudioWorker(QThread):
         self.use_gpu = torch.cuda.is_available()
         self.running = True
         self.beep_enabled = True
+        self.sd_mode = False  # Stable Diffusion prompt mode
         
     def log(self, message):
         timestamp = datetime.now().strftime("%H:%M:%S")
@@ -222,13 +223,19 @@ class AudioWorker(QThread):
                     # Additional check: very short text with high silence ratio is likely hallucination
                     if len(text) > 15 or audio_rms > 0.01:  # Either long text or clear audio
                         self.log(f"Transcribed in {transcribe_time:.2f}s")
+                        
+                        # Format text for Stable Diffusion mode
+                        if self.sd_mode:
+                            text = self.format_for_stable_diffusion(text)
+                            self.log(f"SD formatted: {text}")
+                        
                         self.transcription_signal.emit(text)
                         
                         # Type the text
                         if keyboard.is_pressed('shift') or keyboard.is_pressed('ctrl') or keyboard.is_pressed('alt'):
                             time.sleep(0.1)
                         
-                        text_to_type = ' ' + text
+                        text_to_type = ' ' + text if not self.sd_mode else text
                         keyboard.write(text_to_type)
                     else:
                         self.log(f"Filtered possible hallucination: '{text}'")
@@ -282,6 +289,41 @@ class AudioWorker(QThread):
         except Exception as e:
             self.log(f"Audio error: {e}")
             
+    def format_for_stable_diffusion(self, text):
+        """Format text as comma-separated tags for Stable Diffusion prompts."""
+        import re
+        
+        # Remove punctuation except commas
+        text = re.sub(r'[.!?;:]', ',', text)
+        
+        # Split on common conjunctions and prepositions that indicate new concepts
+        separators = [' and ', ' with ', ' in ', ' on ', ' at ', ' of ', ' for ', ' but ', ' or ']
+        for sep in separators:
+            text = text.replace(sep, ', ')
+        
+        # Split long phrases
+        words = text.split()
+        chunks = []
+        current_chunk = []
+        
+        for word in words:
+            current_chunk.append(word)
+            # Create chunks of 2-4 words
+            if len(current_chunk) >= 3 and word.lower() not in ['a', 'an', 'the', 'is', 'are', 'was', 'were']:
+                chunks.append(' '.join(current_chunk))
+                current_chunk = []
+        
+        if current_chunk:
+            chunks.append(' '.join(current_chunk))
+        
+        # Join with commas and clean up
+        result = ', '.join(chunks)
+        result = re.sub(r',\s*,', ',', result)  # Remove double commas
+        result = re.sub(r'\s+', ' ', result)  # Normalize whitespace
+        result = result.strip(', ').lower()
+        
+        return result
+    
     def stop(self):
         self.running = False
 
@@ -356,6 +398,12 @@ class MainWindow(QMainWindow):
         self.auto_space_checkbox = QCheckBox("Auto-add space")
         self.auto_space_checkbox.setChecked(True)
         options_layout.addWidget(self.auto_space_checkbox)
+        
+        self.sd_mode_checkbox = QCheckBox("Stable Diffusion mode")
+        self.sd_mode_checkbox.setChecked(False)
+        self.sd_mode_checkbox.stateChanged.connect(self.toggle_sd_mode)
+        self.sd_mode_checkbox.setToolTip("Format output as comma-separated tags for image generation")
+        options_layout.addWidget(self.sd_mode_checkbox)
         
         options_layout.addStretch()
         controls_layout.addLayout(options_layout)
@@ -448,6 +496,12 @@ class MainWindow(QMainWindow):
     def toggle_beep(self, state):
         if self.audio_worker:
             self.audio_worker.beep_enabled = (state == 2)
+            
+    def toggle_sd_mode(self, state):
+        if self.audio_worker:
+            self.audio_worker.sd_mode = (state == 2)
+            mode_status = "enabled" if state == 2 else "disabled"
+            self.append_log(f"Stable Diffusion mode {mode_status}")
             
     def start_audio_worker(self):
         self.audio_worker = AudioWorker(self.model_size)
