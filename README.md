@@ -11,7 +11,6 @@ A lightweight, locally-hosted speech-to-text utility that transcribes your voice
 - 📝 **Transcription history** with session logging
 - 🎯 **Multiple Whisper models** (tiny, base, small, medium, large)
 - 🔔 **Audio feedback** for recording start/stop
-- 🎨 **Stable Diffusion mode** formats output as comma-separated tags for image generation
 - 🎯 **Window targeting** send text to specific windows even when not focused
 - ⚡ **Auto-execute** automatically presses Enter after typing text
 - 🗣️ **Voice commands** say "execute mode" to run commands without GUI interaction
@@ -68,7 +67,6 @@ Features:
 - System tray icon (minimize to tray)
 - Microphone selection
 - Model switching
-- Stable Diffusion prompt mode
 - Window targeting (send text to specific windows)
 - Auto-execute commands with Enter key
 - Transcription history
@@ -83,11 +81,13 @@ python speech_to_text.py --model base
 
 | Model | Parameters | VRAM Usage | Speed | Accuracy |
 |-------|------------|------------|-------|----------|
-| tiny | 39M | ~500MB | Fastest | Lower |
-| base | 74M | ~750MB | Fast | Good |
-| small | 244M | ~1.5GB | Medium | Better |
-| medium | 769M | ~3GB | Slower | Great |
-| large | 1550M | ~6GB | Slowest | Best |
+| tiny | 39M | ~1-2GB | Fastest | Lower |
+| base | 74M | ~2-3GB | Fast | Good |
+| small | 244M | ~3-5GB | Medium | Better |
+| medium | 769M | ~6-8GB | Slower | Great |
+| large | 1550M | ~12-14GB | Slowest | Best |
+
+**Note:** VRAM usage includes model weights + inference overhead. Actual usage may vary based on audio length and batch size.
 
 ### How to Use
 
@@ -133,7 +133,6 @@ s2t_basic/
 - **System Tray**: Minimize to tray, stays running in background
 - **Visual Feedback**: Red recording indicator
 - **Model Switching**: Change models without restarting
-- **Stable Diffusion Mode**: Converts speech to comma-separated tags (e.g., "tropical beach, sunset, palm trees")
 - **Window Targeting**: Select specific windows to receive text (e.g., always send to Claude Code terminal)
 - **Auto-Execute**: Automatically press Enter after typing text (perfect for running voice commands)
 - **Voice Commands**: Say "execute mode" at start of speech to auto-run that specific command

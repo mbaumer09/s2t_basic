@@ -1,0 +1,36 @@
+# Default configuration for Speech-to-Text application
+
+audio:
+  sample_rate: 16000
+  channels: 1
+  blocksize: 512
+  max_recording_duration: 30
+  min_recording_duration: 0.5
+  silence_threshold: 0.001
+  normalize_audio: true
+  trim_silence: true
+  device_id: null  # null for default device
+
+transcription:
+  model_size: base  # tiny, base, small, medium, large
+  language: en
+  device: null  # null for auto-detect, or specify 'cpu' or 'cuda'
+  beam_size: 5
+  best_of: 5
+  temperature: 0.0
+  fp16: null  # null for auto-detect based on device
+
+hotkey:
+  record_key: right ctrl
+  debounce_time: 0.5
+
+ui:
+  enable_audio_feedback: true
+  start_beep_frequency: 800
+  stop_beep_frequency: 600
+  error_beep_frequency: 400
+  success_beep_frequency: 1000
+  beep_duration_ms: 100
+  auto_add_space: true
+  auto_execute: false
+  minimize_to_tray: true
