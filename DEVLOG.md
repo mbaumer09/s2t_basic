@@ -290,5 +290,15 @@ s2t_minimal/
 
 ---
 
-*Last Updated: 2025-08-10*
+## Updates
+
+### 2025-08-11: VRAM Usage Correction
+- Discovered actual VRAM usage is much higher than initially documented
+- Large model uses 12-14GB VRAM (not 6GB as originally stated)
+- Updated README and ModelManager with accurate measurements
+- VRAM includes model weights + inference overhead
+
+---
+
+*Last Updated: 2025-08-11*
 *Status: Refactoring Complete - Ready for Production*

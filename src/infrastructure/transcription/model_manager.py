@@ -7,12 +7,13 @@ class ModelManager:
     """Manager for Whisper model lifecycle and optimization."""
     
     # Model sizes and their approximate memory requirements
+    # VRAM usage includes model weights + inference overhead
     MODEL_SPECS = {
-        'tiny': {'params': 39e6, 'vram_mb': 500, 'cpu_ram_mb': 150},
-        'base': {'params': 74e6, 'vram_mb': 750, 'cpu_ram_mb': 290},
-        'small': {'params': 244e6, 'vram_mb': 1500, 'cpu_ram_mb': 970},
-        'medium': {'params': 769e6, 'vram_mb': 3000, 'cpu_ram_mb': 3060},
-        'large': {'params': 1550e6, 'vram_mb': 6000, 'cpu_ram_mb': 6170},
+        'tiny': {'params': 39e6, 'vram_mb': 2000, 'cpu_ram_mb': 150},
+        'base': {'params': 74e6, 'vram_mb': 3000, 'cpu_ram_mb': 290},
+        'small': {'params': 244e6, 'vram_mb': 5000, 'cpu_ram_mb': 970},
+        'medium': {'params': 769e6, 'vram_mb': 8000, 'cpu_ram_mb': 3060},
+        'large': {'params': 1550e6, 'vram_mb': 14000, 'cpu_ram_mb': 6170},
     }
     
     def __init__(self):

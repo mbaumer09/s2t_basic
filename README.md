@@ -81,11 +81,13 @@ python speech_to_text.py --model base
 
 | Model | Parameters | VRAM Usage | Speed | Accuracy |
 |-------|------------|------------|-------|----------|
-| tiny | 39M | ~500MB | Fastest | Lower |
-| base | 74M | ~750MB | Fast | Good |
-| small | 244M | ~1.5GB | Medium | Better |
-| medium | 769M | ~3GB | Slower | Great |
-| large | 1550M | ~6GB | Slowest | Best |
+| tiny | 39M | ~1-2GB | Fastest | Lower |
+| base | 74M | ~2-3GB | Fast | Good |
+| small | 244M | ~3-5GB | Medium | Better |
+| medium | 769M | ~6-8GB | Slower | Great |
+| large | 1550M | ~12-14GB | Slowest | Best |
+
+**Note:** VRAM usage includes model weights + inference overhead. Actual usage may vary based on audio length and batch size.
 
 ### How to Use
 
